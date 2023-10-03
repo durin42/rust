@@ -307,7 +307,16 @@ fn link_rlib<'a>(
         RlibFlavor::Normal => {
             let (metadata, metadata_position) =
                 create_wrapper_file(sess, b".rmeta".to_vec(), codegen_results.metadata.raw_data());
-            let metadata = emit_wrapper_file(sess, &metadata, tmpdir, METADATA_FILENAME);
+            let metadata = if sess.opts.unstable_opts.compress_metadata {
+                let mut e =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                e.write_all(&metadata).unwrap();
+                let comp = e.finish().unwrap();
+                let fname = format!("{}.gz", METADATA_FILENAME);
+                emit_wrapper_file(sess, &comp, tmpdir, &fname)
+            } else {
+                emit_wrapper_file(sess, &metadata, tmpdir, METADATA_FILENAME)
+            };
             match metadata_position {
                 MetadataPosition::First => {
                     // Most of the time metadata in rlib files is wrapped in a "dummy" object

@@ -49,27 +49,56 @@ fn load_metadata_with(
 
 impl MetadataLoader for DefaultMetadataLoader {
     fn get_rlib_metadata(&self, target: &Target, path: &Path) -> Result<OwnedSlice, String> {
-        load_metadata_with(path, |data| {
-            let archive = object::read::archive::ArchiveFile::parse(&*data)
-                .map_err(|e| format!("failed to parse rlib '{}': {}", path.display(), e))?;
+        let file = File::open(path)
+            .map_err(|e| format!("failed to open file '{}': {}", path.display(), e))?;
+        let data: Mmap = unsafe { Mmap::map(file) }
+            .map_err(|e| format!("failed to mmap file '{}': {}", path.display(), e))?;
 
+        let compressed_name = METADATA_FILENAME.to_owned() + ".gz";
+        let comp_name_bytes = compressed_name.as_bytes();
+        let md_bytes = METADATA_FILENAME.as_bytes();
+        let uncompressed: Result<OwnedSlice, Result<OwnedSlice,String>> = try_slice_owned(data, |data_| {
+            let archive = object::read::archive::ArchiveFile::parse(&**data_)
+                .map_err(|e| Err(format!("failed to parse rlib '{}': {}", path.display(), e)))?;
             for entry_result in archive.members() {
                 let entry = entry_result
-                    .map_err(|e| format!("failed to parse rlib '{}': {}", path.display(), e))?;
-                if entry.name() == METADATA_FILENAME.as_bytes() {
-                    let data = entry
-                        .data(data)
-                        .map_err(|e| format!("failed to parse rlib '{}': {}", path.display(), e))?;
+                    .map_err(|e| Err(format!("failed to parse rlib '{}': {}", path.display(), e)))?;
+                if md_bytes == entry.name() {
+                    let member = entry
+                        .data(&**data_)
+                        .map_err(|e| Err(format!("failed to parse rlib {}: {}", path.display(), e)))?;
                     if target.is_like_aix {
-                        return get_metadata_xcoff(path, data);
+                        return get_metadata_xcoff(path, member).map_err(|e| Err(e));
                     } else {
-                        return search_for_section(path, data, ".rmeta");
+                        return search_for_section(path, member, ".rmeta").map_err(|e| Err(e));
                     }
+                } else if comp_name_bytes == entry.name() {
+                    let comp = entry
+                        .data(&**data_)
+                        .map_err(|e| Err(format!("failed to parse rlib '{}': {}", path.display(), e)))?;
+                    let mut out: Vec<u8> = vec![];
+                    use std::io::Read;
+                    flate2::read::GzDecoder::new(comp).read_to_end(&mut out).map_err(|e| {
+                        Err(format!("failed to decompress metadata for rlib {}: {}", path.display(), e))
+                    })?;
+                    return Err(try_slice_owned(out, |b| {
+                        if target.is_like_aix {
+                            return get_metadata_xcoff(path, b);
+                        } else {
+                            return search_for_section(path, b, ".rmeta");
+                        }
+                    }));
                 }
             }
-
-            Err(format!("metadata not found in rlib '{}'", path.display()))
-        })
+            Err(Err(format!("metadata not found in rlib '{}'", path.display())))
+        });
+        match uncompressed {
+            Ok(os) =>  Ok(os),
+            Err(e) => match e {
+                Ok(os) =>  Ok(os),
+                Err(e) =>  Err(e)
+            }
+        }
     }
 
     fn get_dylib_metadata(&self, target: &Target, path: &Path) -> Result<OwnedSlice, String> {

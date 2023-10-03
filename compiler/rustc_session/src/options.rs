@@ -1439,6 +1439,7 @@ options! {
         "the backend to use"),
     combine_cgu: bool = (false, parse_bool, [TRACKED],
         "combine CGUs into a single one"),
+    compress_metadata: bool = (false, parse_bool, [UNTRACKED], "compress rustc metadata in rlibs"),
     crate_attr: Vec<String> = (Vec::new(), parse_string_push, [TRACKED],
         "inject the given attribute in the crate"),
     debug_info_for_profiling: bool = (false, parse_bool, [TRACKED],
