@@ -24,9 +24,9 @@ pub fn array_eq_ref(a: &[u16; 3], b: &[u16; 3]) -> bool {
 
 // CHECK-LABEL: @array_eq_value_still_passed_by_pointer
 #[no_mangle]
-pub fn array_eq_value_still_passed_by_pointer(a: [u16; 9], b: [u16; 9]) -> bool {
+pub fn array_eq_value_still_passed_by_pointer(a: [u16; 32], b: [u16; 32]) -> bool {
     // CHECK-NEXT: start:
-    // CHECK: %[[CMP:.+]] = tail call i32 @{{bcmp|memcmp}}(ptr {{.*}} dereferenceable(18) %{{.+}}, ptr {{.*}} dereferenceable(18) %{{.+}}, i64 18)
+    // CHECK: %[[CMP:.+]] = tail call i32 @{{bcmp|memcmp}}(ptr {{.*}} dereferenceable(64) %{{.+}}, ptr {{.*}} dereferenceable(64) %{{.+}}, i64 64)
     // CHECK-NEXT: %[[EQ:.+]] = icmp eq i32 %[[CMP]], 0
     // CHECK-NEXT: ret i1 %[[EQ]]
     a == b
