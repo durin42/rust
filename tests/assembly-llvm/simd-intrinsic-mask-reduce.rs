@@ -35,10 +35,10 @@ pub unsafe extern "C" fn mask_reduce_all(m: mask8x16) -> bool {
     //
     // aarch64-NOT: shl
     // aarch64: cmge v0.16b, v0.16b, #0
-    // aarch64-DAG: mov [[REG1:[a-z0-9]+]], #1
-    // aarch64-DAG: umaxv b0, v0.16b
-    // aarch64-NEXT: fmov [[REG2:[a-z0-9]+]], s0
-    // aarch64-NEXT: bic w0, [[REG1]], [[REG2]]
+    // aarch64: {{umaxv b0, v0.16b|addp d0, v0.2d}}
+    // aarch64-NEXT: fmov {{[a-z0-9]+}}, {{s0|d0}}
+    // aarch64-NEXT: {{bic w0, [a-z0-9]+, [a-z0-9]+|cmp [a-z0-9]+, #0}}
+    // aarch64-NEXT: {{ret.*|cset w0, eq}}
     simd_reduce_all(m)
 }
 
@@ -52,8 +52,9 @@ pub unsafe extern "C" fn mask_reduce_any(m: mask8x16) -> bool {
     //
     // aarch64-NOT: shl
     // aarch64: cmlt v0.16b, v0.16b, #0
-    // aarch64-NEXT: umaxv b0, v0.16b
-    // aarch64-NEXT: fmov [[REG:[a-z0-9]+]], s0
-    // aarch64-NEXT: and w0, [[REG]], #0x1
+    // aarch64-NEXT: {{umaxv b0, v0.16b|addp d0, v0.2d}}
+    // aarch64-NEXT: fmov {{[a-z0-9]+}}, {{s0|d0}}
+    // aarch64-NEXT: {{and w0, [a-z0-9]+, #0x1|cmp [a-z0-9]+, #0}}
+    // aarch64-NEXT: {{ret.*|cset w0, ne}}
     simd_reduce_any(m)
 }
