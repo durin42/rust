@@ -1,7 +1,6 @@
 //@ build-pass
 //@ ignore-backends: gcc
 //@ add-minicore
-//@ min-llvm-version: 22
 //
 //@ revisions: i686
 //@[i686] compile-flags: --target i686-unknown-linux-gnu
@@ -33,6 +32,7 @@
 //@ revisions: powerpc64
 //@[powerpc64] compile-flags: --target powerpc64-unknown-linux-gnu
 //@[powerpc64] needs-llvm-components: powerpc
+// loongarch disabled musttail in LLVM 22, didn't come back in LLVM 23
 //@ revisions: loongarch32
 //@[loongarch32] compile-flags: --target loongarch32-unknown-none
 //@[loongarch32] needs-llvm-components: loongarch

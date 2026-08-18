@@ -919,9 +919,7 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     self.set_metadata_node(store, llvm::MD_nontemporal, &[one]);
                 }
             }
-            if flags.contains(MemFlags::CAPTURES_READ_ONLY)
-                && crate::llvm_util::get_version() >= (22, 0, 0)
-            {
+            if flags.contains(MemFlags::CAPTURES_READ_ONLY) {
                 assert!(
                     self.type_kind(self.val_ty(val)) == TypeKind::Pointer,
                     "CAPTURED_READ_ONLY is only supported on pointer stores"
@@ -930,10 +928,7 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     self.cx.create_metadata(b"address"),
                     self.cx.create_metadata(b"read_provenance"),
                 ];
-                // FIXME: Switch this to use MD_captures once LLVM 22 is the minimum.
-                let id = self.get_md_kind_id("captures");
-                let md = llvm::LLVMMDNodeInContext2(self.cx.llcx, args.as_ptr(), args.len());
-                self.set_metadata(store, id, md);
+                self.set_metadata_node(store, llvm::MD_captures, &args);
             }
             store
         }
@@ -1903,14 +1898,10 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
             return;
         }
 
-        if crate::llvm_util::get_version() >= (22, 0, 0) {
-            // LLVM 22 requires the lifetime intrinsic to act directly on the alloca,
-            // there can't be an addrspacecast in between.
-            let ptr = unsafe { llvm::LLVMRustStripPointerCasts(ptr) };
-            self.call_intrinsic(intrinsic, &[self.val_ty(ptr)], &[ptr]);
-        } else {
-            self.call_intrinsic(intrinsic, &[self.val_ty(ptr)], &[self.cx.const_u64(size), ptr]);
-        }
+        // LLVM 22 requires the lifetime intrinsic to act directly on the alloca,
+        // there can't be an addrspacecast in between.
+        let ptr = unsafe { llvm::LLVMRustStripPointerCasts(ptr) };
+        self.call_intrinsic(intrinsic, &[self.val_ty(ptr)], &[ptr]);
     }
 }
 impl<'a, 'll, CX: Borrow<SCx<'ll>>> GenericBuilder<'a, 'll, CX> {

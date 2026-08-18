@@ -1,10 +1,8 @@
-use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::str::SplitWhitespace;
 
 use shlex::Shlex;
 
@@ -112,53 +110,6 @@ fn execute(cmd: &mut Command) -> Output {
 fn output(cmd: &mut Command) -> String {
     String::from_utf8(execute(cmd.stderr(Stdio::inherit())).stdout).unwrap()
 }
-#[track_caller]
-fn stderr(cmd: &mut Command) -> String {
-    String::from_utf8(execute(cmd).stderr).unwrap()
-}
-
-enum LlvmConfigOutput {
-    QuotedPaths(String),
-    UnquotedPaths(String),
-}
-
-enum SplitLlvmConfigOutput<'a> {
-    QuotedPaths(Shlex<'a>),
-    UnquotedPaths(SplitWhitespace<'a>),
-}
-
-impl<'a> Iterator for SplitLlvmConfigOutput<'a> {
-    type Item = Cow<'a, str>;
-    fn next(&mut self) -> Option<Cow<'a, str>> {
-        match self {
-            Self::QuotedPaths(iter) => iter.next().map(Cow::Owned),
-            Self::UnquotedPaths(iter) => iter.next().map(Cow::Borrowed),
-        }
-    }
-}
-
-impl Drop for SplitLlvmConfigOutput<'_> {
-    fn drop(&mut self) {
-        if let Self::QuotedPaths(shlex) = self {
-            assert!(!shlex.had_error, "error parsing llvm-config output");
-        }
-    }
-}
-
-impl<'a> IntoIterator for &'a LlvmConfigOutput {
-    type Item = Cow<'a, str>;
-    type IntoIter = SplitLlvmConfigOutput<'a>;
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            LlvmConfigOutput::QuotedPaths(output) => {
-                SplitLlvmConfigOutput::QuotedPaths(Shlex::new(output))
-            }
-            LlvmConfigOutput::UnquotedPaths(output) => {
-                SplitLlvmConfigOutput::UnquotedPaths(output.split_whitespace())
-            }
-        }
-    }
-}
 
 fn is_libstdcxx_cxx11_abi_flag(flag: &str) -> bool {
     flag == "-D_GLIBCXX_USE_CXX11_ABI"
@@ -187,17 +138,12 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", llvm_config.display());
 
-    // FIXME: `--quote-paths` was added to llvm-config in LLVM 22, so this test (and all its ensuing
-    //        fallback paths) can be removed once we bump the minimum llvm_version >= (22, 0, 0).
-    let llvm_config_supports_quote_paths =
-        stderr(Command::new(&llvm_config).arg("--help")).contains("quote-paths");
-
     let quoted_split = |mut cmd: Command| {
-        if llvm_config_supports_quote_paths {
-            LlvmConfigOutput::QuotedPaths(output(cmd.arg("--quote-paths")))
-        } else {
-            LlvmConfigOutput::UnquotedPaths(output(&mut cmd))
-        }
+        let out = output(cmd.arg("--quote-paths"));
+        let mut shlex = Shlex::new(&out);
+        let items: Vec<String> = shlex.by_ref().collect();
+        assert!(!shlex.had_error, "error parsing llvm-config output");
+        items
     };
 
     // Test whether we're cross-compiling LLVM. This is a pretty rare case
@@ -512,7 +458,7 @@ fn main() {
     // C++ runtime library
     if !target.contains("msvc") {
         if let Some(s) = llvm_static_stdcpp {
-            assert!(cxxflags.into_iter().all(|flag| flag != "-stdlib=libc++"));
+            assert!(cxxflags.iter().all(|flag| flag != "-stdlib=libc++"));
             let path = PathBuf::from(s);
             println!("cargo:rustc-link-search=native={}", path.parent().unwrap().display());
             if target.contains("windows") {
@@ -520,7 +466,7 @@ fn main() {
             } else {
                 println!("cargo:rustc-link-lib=static={stdcppname}");
             }
-        } else if cxxflags.into_iter().any(|flag| flag == "-stdlib=libc++") {
+        } else if cxxflags.iter().any(|flag| flag == "-stdlib=libc++") {
             println!("cargo:rustc-link-lib=c++");
         } else {
             println!("cargo:rustc-link-lib={stdcppname}");
